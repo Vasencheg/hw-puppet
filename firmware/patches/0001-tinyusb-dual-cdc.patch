@@ -1,0 +1,183 @@
+diff --git a/ports/esp32/lockfiles/dependencies.lock.esp32s3 b/ports/esp32/lockfiles/dependencies.lock.esp32s3
+index a57ac9a4d..b35411ea4 100644
+--- a/ports/esp32/lockfiles/dependencies.lock.esp32s3
++++ b/ports/esp32/lockfiles/dependencies.lock.esp32s3
+@@ -27,7 +27,7 @@ dependencies:
+   idf:
+     source:
+       type: idf
+-    version: 5.5.2
++    version: 5.4.0
+ direct_dependencies:
+ - espressif/mdns
+ - espressif/tinyusb
+diff --git a/shared/tinyusb/mp_usbd.h b/shared/tinyusb/mp_usbd.h
+index e8a435f06..54adf8fdb 100644
+--- a/shared/tinyusb/mp_usbd.h
++++ b/shared/tinyusb/mp_usbd.h
+@@ -83,7 +83,7 @@ void mp_usbd_hex_str(char *out_str, const uint8_t *bytes, size_t bytes_len);
+ 
+ // Length of built-in configuration descriptor
+ #define MP_USBD_BUILTIN_DESC_CFG_LEN ( \
+-    (CFG_TUD_CDC ? (TUD_CDC_DESC_LEN) : 0) + \
++    (CFG_TUD_CDC ? (CFG_TUD_CDC * (TUD_CDC_DESC_LEN)) : 0) + \
+     (CFG_TUD_MSC ? (TUD_MSC_DESC_LEN) : 0) + \
+     (CFG_TUD_NCM ? (TUD_CDC_NCM_DESC_LEN) : 0) + \
+     TUD_CONFIG_DESC_LEN)
+diff --git a/shared/tinyusb/mp_usbd_cdc.c b/shared/tinyusb/mp_usbd_cdc.c
+index 8018032d3..5ffec91ab 100644
+--- a/shared/tinyusb/mp_usbd_cdc.c
++++ b/shared/tinyusb/mp_usbd_cdc.c
+@@ -74,6 +74,9 @@ uintptr_t mp_usbd_cdc_poll_interfaces(uintptr_t poll_flags) {
+ }
+ 
+ void MICROPY_WRAP_TUD_CDC_RX_CB(tud_cdc_rx_cb)(uint8_t itf) {
++    if (itf != 0) {
++        return;
++    }
+     // consume pending USB data immediately to free usb buffer and keep the endpoint from stalling.
+     // in case the ringbuffer is full, mark the CDC interface that need attention later on for polling
+     cdc_itf_pending &= ~(1 << itf);
+@@ -180,15 +183,20 @@ static struct {
+ void MICROPY_WRAP_TUD_CDC_LINE_STATE_CB(tud_cdc_line_state_cb)(uint8_t itf, bool dtr, bool rts) {
+     #if MICROPY_HW_USB_CDC && !MICROPY_EXCLUDE_SHARED_TINYUSB_USBD_CDC
+     if (dtr) {
+-        // A host application has started to open the cdc serial port.
+-        // USBD_CDC_EP_IN is the IN endpoint for itf 0; only clear stall for itf 0.
+-        if (itf == 0 && usbd_edpt_stalled(TUD_OPT_RHPORT, USBD_CDC_EP_IN)) {
+-            usbd_edpt_clear_stall(TUD_OPT_RHPORT, USBD_CDC_EP_IN);
++        if (itf == 0) {
++            if (usbd_edpt_stalled(TUD_OPT_RHPORT, USBD_CDC_EP_IN)) {
++                usbd_edpt_clear_stall(TUD_OPT_RHPORT, USBD_CDC_EP_IN);
++            }
++            // Wait a few ms for host to be ready then send tx buffer.
++            // High speed connection SOF fires at 125us, full speed at 1ms.
++            cdc_connected_flush_delay = (tud_speed_get() == TUSB_SPEED_HIGH) ? 128 : 16;
++            tud_sof_cb_enable(true);
++        }
++        #if CFG_TUD_CDC > 1
++        if (itf == 1 && usbd_edpt_stalled(TUD_OPT_RHPORT, USBD_CDC_1_EP_IN)) {
++            usbd_edpt_clear_stall(TUD_OPT_RHPORT, USBD_CDC_1_EP_IN);
+         }
+-        // Wait a few ms for host to be ready then send tx buffer.
+-        // High speed connection SOF fires at 125us, full speed at 1ms.
+-        cdc_connected_flush_delay = (tud_speed_get() == TUSB_SPEED_HIGH) ? 128 : 16;
+-        tud_sof_cb_enable(true);
++        #endif
+     } else {
+         // Host has closed the cdc serial port. Discard pending TX data to
+         // avoid a full FIFO blocking writes on the next connection.
+diff --git a/shared/tinyusb/mp_usbd_descriptor.c b/shared/tinyusb/mp_usbd_descriptor.c
+index f6b1fe929..279c0a92d 100644
+--- a/shared/tinyusb/mp_usbd_descriptor.c
++++ b/shared/tinyusb/mp_usbd_descriptor.c
+@@ -76,6 +76,10 @@ const uint8_t mp_usbd_builtin_desc_cfg[MP_USBD_BUILTIN_DESC_CFG_LEN] = {
+     #if CFG_TUD_CDC
+     TUD_CDC_DESCRIPTOR(USBD_ITF_CDC, USBD_STR_CDC, USBD_CDC_EP_CMD,
+         USBD_CDC_CMD_MAX_SIZE, USBD_CDC_EP_OUT, USBD_CDC_EP_IN, USBD_CDC_IN_OUT_MAX_SIZE),
++    #if CFG_TUD_CDC > 1
++    TUD_CDC_DESCRIPTOR(USBD_ITF_CDC_1, USBD_STR_CDC_1, USBD_CDC_1_EP_CMD,
++        USBD_CDC_CMD_MAX_SIZE, USBD_CDC_1_EP_OUT, USBD_CDC_1_EP_IN, USBD_CDC_IN_OUT_MAX_SIZE),
++    #endif
+     #endif
+     #if CFG_TUD_MSC
+     TUD_MSC_DESCRIPTOR(USBD_ITF_MSC, USBD_STR_MSC, USBD_MSC_EP_OUT, USBD_MSC_EP_IN, USBD_MSC_IN_OUT_MAX_SIZE),
+@@ -129,6 +133,11 @@ const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
+             case USBD_STR_CDC:
+                 desc_str = MICROPY_HW_USB_CDC_INTERFACE_STRING;
+                 break;
++            #if CFG_TUD_CDC > 1
++            case USBD_STR_CDC_1:
++                desc_str = MICROPY_HW_USB_CDC_1_INTERFACE_STRING;
++                break;
++            #endif
+             #endif
+             #if CFG_TUD_MSC
+             case USBD_STR_MSC:
+diff --git a/shared/tinyusb/tusb_config.h b/shared/tinyusb/tusb_config.h
+index 5432b9ca2..ab4bfba6f 100644
+--- a/shared/tinyusb/tusb_config.h
++++ b/shared/tinyusb/tusb_config.h
+@@ -47,6 +47,10 @@
+ #define MICROPY_HW_USB_CDC_INTERFACE_STRING "Board CDC"
+ #endif
+ 
++#ifndef MICROPY_HW_USB_CDC_1_INTERFACE_STRING
++#define MICROPY_HW_USB_CDC_1_INTERFACE_STRING "Board CDC2"
++#endif
++
+ #ifndef MICROPY_HW_USB_MSC_INQUIRY_VENDOR_STRING
+ #define MICROPY_HW_USB_MSC_INQUIRY_VENDOR_STRING "MicroPy"
+ #endif
+@@ -64,7 +68,13 @@
+ #endif
+ 
+ #if MICROPY_HW_USB_CDC
++#ifndef CFG_TUD_CDC
++#ifdef MICROPY_HW_USB_CDC_NUM
++#define CFG_TUD_CDC             (MICROPY_HW_USB_CDC_NUM)
++#else
+ #define CFG_TUD_CDC             (1)
++#endif
++#endif
+ #else
+ #define CFG_TUD_CDC             (0)
+ #endif
+@@ -136,6 +146,9 @@ enum _USBD_STR {
+     USBD_STR_SERIAL = (0x03),
+     #if CFG_TUD_CDC
+     USBD_STR_CDC,
++    #if CFG_TUD_CDC > 1
++    USBD_STR_CDC_1,
++    #endif
+     #endif
+     #if CFG_TUD_MSC
+     USBD_STR_MSC,
+@@ -159,6 +172,10 @@ enum _USBD_ITF {
+     #if CFG_TUD_CDC
+     USBD_ITF_CDC,
+     USBD_ITF_CDC_I2,
++    #if CFG_TUD_CDC > 1
++    USBD_ITF_CDC_1,
++    USBD_ITF_CDC_1_I2,
++    #endif
+     #endif // CFG_TUD_CDC
+     #if CFG_TUD_MSC
+     USBD_ITF_MSC,
+@@ -174,6 +191,10 @@ enum _USBD_EP {
+     #if CFG_TUD_CDC
+     USBD_CDC_EP_CMD,
+     USBD_CDC_EP_IN,
++    #if CFG_TUD_CDC > 1
++    USBD_CDC_1_EP_CMD,
++    USBD_CDC_1_EP_IN,
++    #endif
+     #endif // CFG_TUD_CDC
+     #if CFG_TUD_MSC
+     USBD_MSC_EP_IN,
+@@ -187,6 +208,9 @@ enum _USBD_EP {
+ // define the matching in endpoints to each EP_OUT
+ #if CFG_TUD_CDC
+ #define USBD_CDC_EP_OUT  (USBD_CDC_EP_IN & ~TUSB_DIR_IN_MASK)
++#if CFG_TUD_CDC > 1
++#define USBD_CDC_1_EP_OUT (USBD_CDC_1_EP_IN & ~TUSB_DIR_IN_MASK)
++#endif
+ #endif
+ #if CFG_TUD_MSC
+ #define USBD_MSC_EP_OUT  (USBD_MSC_EP_IN & ~TUSB_DIR_IN_MASK)
+@@ -199,13 +223,13 @@ enum _USBD_EP {
+ /* Limits of builtin USB interfaces, endpoints, strings */
+ // Number of interfaces used by all enabled classes
+ #define USBD_ITF_BUILTIN_MAX ( \
+-    (CFG_TUD_CDC ? 2 : 0) + \
++    (CFG_TUD_CDC ? (2 * CFG_TUD_CDC) : 0) + \
+     (CFG_TUD_MSC ? 1 : 0) + \
+     (CFG_TUD_NCM ? 2 : 0))
+ 
+ // 1 plus the number of interfaces used by all enabled classes
+ #define USBD_EP_BUILTIN_MAX ( \
+-    (CFG_TUD_CDC ? 2 : 0) + \
++    (CFG_TUD_CDC ? (2 * CFG_TUD_CDC) : 0) + \
+     (CFG_TUD_MSC ? 1 : 0) + \
+     (CFG_TUD_NCM ? 2 : 0) + \
+     1)

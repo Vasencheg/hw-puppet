@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+.pytest_cache/
+
+# MicroPython / ESP-IDF build temp
+build-*/
+*.elf
+*.map
+.ninja_log
+compile_commands.json
+
+# Keep precompiled release binaries in build/
+build/*
+!build/firmware.bin
+!build/bootloader.bin
+!build/partition-table.bin
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~

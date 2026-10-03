@@ -1,0 +1,2 @@
+# ESP-IDF v5.4 compatibility: disable slave v2 to avoid driver_ng collision with legacy i2c
+CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION_2=n
