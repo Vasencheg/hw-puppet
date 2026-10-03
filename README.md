@@ -51,11 +51,31 @@ Flash the firmware onto an off-the-shelf **ESP32-S3-DevKitC-1** development boar
   * **CDC 0 (`/dev/hw-puppet-control` / `/dev/ttyACM0`):** MicroPython REPL (115200 baud). Host executes scripts directly in RAM using zero-flash Raw REPL RPC.
   * **CDC 1 (`/dev/hw-puppet-uart` / `/dev/ttyACM1`):** Transparent hardware UART bridge connected to the target console (default 115200 baud, configurable up to 921600+).
 * **Standard Hardware Control:** Native `machine.Pin`, `machine.Timer`, `neopixel` (WS2812 status LED), and `Pin.irq` without custom driver lock-in.
+* **On-Device Hardware Pattern Matcher:** Real-time C-level pattern detection and microsecond-level auto-reply directly on Core 0 (`uart_bridge.wait_for`, `uart_bridge.arm_match`).
 * **Completely Framework-Agnostic:** Works with any language, `pytest`, bash scripts, `minicom`/`tio`, CI/CD pipelines, or agentic tool frameworks (MCP).
 
 ---
 
-## 2. Supported Hardware & Platform
+## 2. Device Naming & Identifiers
+
+To avoid confusion across tools, build scripts, USB descriptors, and udev rules, the project uses the following standardized naming conventions:
+
+| Context / Layer | Identifier / Variation | Description |
+|:---|:---|:---|
+| **Human-Readable Name** | **HW Puppet** / **HWPuppet** | Official project and hardware harness title |
+| **Repository & CLI** | `hw-puppet` | Git repository name, folder naming, command prefix |
+| **Firmware Board Target** | `HW_PUPPET` | MicroPython CMake board name (`BOARD=HW_PUPPET`), folder `firmware/boards/HW_PUPPET/` |
+| **USB Manufacturer** | `HW-Puppet` | USB Device Descriptor manufacturer string (`0x303a:0x4002`) |
+| **USB Product Name** | `HW-PUPPET` | USB Device Descriptor product string |
+| **USB CDC 0 Interface** | `HW-PUPPET REPL` | Primary control & MicroPython Raw REPL interface string |
+| **USB CDC 1 Interface** | `HW-PUPPET UART Bridge` | Secondary high-speed UART console stream interface string |
+| **Linux Udev Control Node** | `/dev/hw-puppet-control` | Stable symlink to CDC 0 (symlinked to `/dev/ttyACM0`) |
+| **Linux Udev UART Node** | `/dev/hw-puppet-uart` | Stable symlink to CDC 1 (symlinked to `/dev/ttyACM1`) |
+| **Python / C Packages** | `hw_puppet`, `uart_bridge` | Python import identifiers and native C module names |
+
+---
+
+## 3. Supported Hardware & Platform
 
 `hw-puppet` runs on the **Espressif ESP32-S3** microcontroller series featuring native USB OTG peripheral support.
 
@@ -80,23 +100,54 @@ The recommended dev boards feature two distinct USB Type-C receptacles:
 
 ---
 
-## 3. Pinout & Hardware Connections
+## 4. Pinout & Hardware Connections
 
 ### ESP32-S3 Pin Mapping (Default)
+The firmware reserves only the hardware UART peripheral lines for the transparent console bridge. All other GPIO pins remain completely free and dynamically configurable via standard MicroPython `machine.Pin`:
+
 | ESP32-S3 Pin | Function | Target / DUT Connection | Description |
 |:---|:---|:---|:---|
-| **GPIO 43** | UART1 TX | Target RX | Serial command TX to target console |
-| **GPIO 44** | UART1 RX | Target TX | Serial log RX from target console |
-| **GPIO 1** | Control 1 | RESET pin | Active low/high pulse to reset target |
-| **GPIO 2** | Control 2 | RECOVERY / BOOT pin | Held low/high during reset for bootloader |
-| **GPIO 3** | Control 3 | POWER Relay / Mosfet | 12V/5V DC barrel jack power cycle |
+| **GPIO 43** | UART1 TX | Target RX | Serial command TX to target console (115200..921600 baud) |
+| **GPIO 44** | UART1 RX | Target TX | Serial log RX from target console (115200..921600 baud) |
 | **GND** | Ground | Target GND | Common reference ground (**mandatory**) |
+
+> [!NOTE]
+> All other ESP32-S3 pins (relays, reset lines, recovery/boot mode, power switches, I2C, SPI) are controlled dynamically from host scripts or target modules without firmware recompilation.
 
 ---
 
-## 4. Quickstart
+## 5. On-Device UART Pattern Matcher & Auto-Reply
 
-### 4.1 Install Udev Rules (Linux)
+To eliminate the 10–50 ms USB-roundtrip latency when synchronizing with target boot sequences (e.g. stopping U-Boot autoboot in a 1-second window), `hw-puppet` implements an **on-the-fly streaming KMP matcher** in native C on Core 0.
+
+Bytes from UART1 RX are checked in $O(1)$ time without interrupting transparent streaming to USB CDC 1.
+
+```python
+import uart_bridge
+
+# 1. Catch bootloader prompt and auto-reply with a space within microseconds:
+if uart_bridge.wait_for("Hit any key to stop autoboot", reply=" ", timeout_ms=5000):
+    print("Autoboot interrupted successfully on-device!")
+
+# 2. Wait for login prompt with timeout:
+if uart_bridge.wait_for("login:", timeout_ms=15000):
+    print("Target reached login prompt")
+
+# 3. Direct UART transmission:
+uart_bridge.write(b"root\n")
+
+# 4. Asynchronous trigger check:
+uart_bridge.arm_match("Kernel panic")
+# ... perform tests ...
+if uart_bridge.matched():
+    print("Target crashed with kernel panic!")
+```
+
+---
+
+## 6. Quickstart
+
+### 6.1 Install Udev Rules (Linux)
 Install udev rules to get persistent, human-readable symlinks:
 ```bash
 ./build.sh install-rules
@@ -105,13 +156,13 @@ This registers:
 * `/dev/hw-puppet-control` -> CDC 0 (MicroPython REPL)
 * `/dev/hw-puppet-uart` -> CDC 1 (Target UART console)
 
-### 4.2 Flash Pre-built Firmware
+### 6.2 Flash Pre-built Firmware
 Connect the ESP32-S3 USB port in download mode (hold BOOT, tap RESET, release BOOT):
 ```bash
 esptool.py -p /dev/ttyACM0 -b 460800 write_flash 0x0 build/firmware.bin
 ```
 
-### 4.3 Monitor Target Console
+### 6.3 Monitor Target Console
 Open CDC 1 to see target boot logs:
 ```bash
 ./tools/monitor_target.py
@@ -119,7 +170,7 @@ Open CDC 1 to see target boot logs:
 tio /dev/hw-puppet-uart
 ```
 
-### 4.4 Execute Control Scripts on the Board
+### 6.4 Execute Control Scripts on the Board
 Run Python scripts directly on the ESP32-S3 in RAM (no flash wear):
 ```bash
 ./tools/run_script.py examples/jetson_reset.py
@@ -128,10 +179,10 @@ Run Python scripts directly on the ESP32-S3 in RAM (no flash wear):
 
 ---
 
-## 5. Building Firmware from Source
+## 7. Building Firmware from Source
 
 ### Prerequisites
-* ESP-IDF v5.4+ installed and activated (`. $IDF_PATH/export.sh`)
+* ESP-IDF v5.4+ installed and activated (`. $IDF_PATH/export.sh` or `get_idf`)
 * CMake & Ninja
 
 ### Build
@@ -145,7 +196,7 @@ Output artifacts are copied to `build/`:
 
 ---
 
-## 6. Repository Structure
+## 8. Repository Structure
 
 ```text
 hw-puppet/
@@ -168,6 +219,23 @@ hw-puppet/
 
 ---
 
-## 7. Ecosystem & Integrations
+## 9. Ecosystem & Integrations
 
-`hw-puppet` can be used directly via serial/REPL, or paired with host agent gateways (such as FastMCP servers) to enable automated troubleshooting, flashing, and diagnostics on real hardware from AI coding agents.
+While `hw-puppet` functions completely standalone via raw REPL, Python scripts, or terminal emulators (`tio`, `minicom`), it is engineered as the core hardware execution engine for the [**`ae-hw-bridge`**](https://github.com/Vasencheg/ae-hw-bridge) (Agents Engine Hardware Bridge) ecosystem.
+
+### Pairing with `ae-hw-bridge` (FastMCP Gateway)
+
+[**`ae-hw-bridge`**](https://github.com/Vasencheg/ae-hw-bridge) is the official host agent gateway and FastMCP server for `hw-puppet`:
+
+* **Single-Owner Host Daemon (`ae-hw-bridge-daemon`):** Prevents serial port contention by owning `/dev/hw-puppet-control` and `/dev/hw-puppet-uart`. Multiple CLI clients, test suites, and AI agent sessions connect concurrently over non-blocking Unix domain socket IPC (`/tmp/ae-hw-bridge.sock`).
+* **Model Context Protocol (MCP) Interface:** Exposes vetted, high-level automation tools (`send_target_command`, `read_target_console`, `wait_for_console_pattern`, `full_reboot`, `enter_recovery`) directly to AI coding agents (Claude Desktop, Gemini, Cursor, OpenCode, Agents Engine).
+* **Dynamic Target Modules (`.ae-hw-bridge/targets/`):** Define DUT-specific behaviors (pin mappings, reset timings, boot patterns, and login credentials) in Python without modifying the base firmware.
+* **Onboard WS2812 Visual Telemetry:** Real-time visual feedback on the ESP32-S3 RGB LED indicating current DUT state (flashing, recovery, rebooting, console ready).
+
+```bash
+# Install host gateway
+pip install ae-hw-bridge
+
+# Launch MCP server for agents
+ae-hw-bridge-mcp
+```
