@@ -114,6 +114,13 @@ The firmware reserves only the hardware UART peripheral lines for the transparen
 > [!NOTE]
 > All other ESP32-S3 pins (relays, reset lines, recovery/boot mode, power switches, I2C, SPI) are controlled dynamically from host scripts or target modules without firmware recompilation.
 
+> [!WARNING]
+> **Target Logic Voltage Compatibility (3.3V vs 1.8V vs 5V):**
+> - **Native 3.3V I/O:** ESP32-S3 GPIO pins (including UART TX/RX) operate at **3.3V LVCMOS** logic levels and are **NOT 5V tolerant**.
+> - **1.8V Targets (e.g. Jetson raw SoC headers, FPGAs, mobile SoCs):** Connecting 3.3V directly to 1.8V I/O pins will permanently damage the target SoC! Always verify target debug UART voltage and use a bidirectional logic level shifter (e.g. TXS0108 / PCA9306) or 1.8V-buffered debug header.
+> - **5V Targets:** Require level shifting (e.g. resistive divider or buffer on RX) to protect ESP32-S3 inputs from overvoltage.
+> - **Relay Isolation:** Using onboard dry-contact relays for RESET, RECOVERY, and POWER lines provides galvanic isolation, making relay-based control safe regardless of target voltage levels.
+
 ---
 
 ## 5. On-Device UART Pattern Matcher & Auto-Reply
