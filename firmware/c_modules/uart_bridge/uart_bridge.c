@@ -1,11 +1,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "freertos/idf_additions.h"
 #include "uart_bridge.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "tusb.h"
 #include "esp_log.h"
+#include <string.h>
 
 #define UART_NUM            UART_NUM_1
 #define UART_TX_PIN         43
@@ -14,13 +16,42 @@
 #define UART_BUF_SIZE       (16 * 1024)
 #define CDC_INTERFACE       1
 
+#define MAX_PATTERN_LEN     64
+#define MAX_REPLY_LEN       32
+
 static const char *TAG = "uart_bridge";
 
 static TaskHandle_t bridge_task_handle = NULL;
 static bool bridge_initialized = false;
 static bool bridge_running = false;
 static uint32_t current_baud = DEFAULT_UART_BAUD;
+
+static volatile bool match_active = false;
+static volatile bool match_found = false;
+static char match_pattern[MAX_PATTERN_LEN];
+static uint32_t match_pattern_len = 0;
+static uint32_t match_curr_idx = 0;
+static uint8_t kmp_next[MAX_PATTERN_LEN];
+static char match_reply[MAX_REPLY_LEN];
+static uint32_t match_reply_len = 0;
+static SemaphoreHandle_t match_sem = NULL;
+
 static void uart_bridge_task(void *arg);
+
+static void compute_kmp_table(const char *pat, uint32_t len, uint8_t *next) {
+    if (len == 0) return;
+    next[0] = 0;
+    uint32_t j = 0;
+    for (uint32_t i = 1; i < len; i++) {
+        while (j > 0 && pat[i] != pat[j]) {
+            j = next[j - 1];
+        }
+        if (pat[i] == pat[j]) {
+            j++;
+        }
+        next[i] = (uint8_t)j;
+    }
+}
 
 bool uart_bridge_set_baud(uint32_t baud_rate) {
     if (baud_rate < 300 || baud_rate > 5000000) {
@@ -102,6 +133,9 @@ void uart_bridge_init(void) {
     gpio_set_pull_mode(UART_RX_PIN, GPIO_PULLUP_ONLY);
 
     bridge_initialized = true;
+    if (!match_sem) {
+        match_sem = xSemaphoreCreateBinary();
+    }
     ESP_LOGI(TAG, "UART1 initialized @ %lu baud, TX=%d RX=%d", (unsigned long)current_baud, UART_TX_PIN, UART_RX_PIN);
 }
 
@@ -124,6 +158,68 @@ void uart_bridge_stop(void) {
     ESP_LOGI(TAG, "Bridge stopped");
 }
 
+int uart_bridge_write(const uint8_t *data, size_t len) {
+    if (!bridge_initialized) {
+        uart_bridge_init();
+    }
+    if (data == NULL || len == 0) return 0;
+    return uart_write_bytes(UART_NUM, (const char *)data, len);
+}
+
+bool uart_bridge_arm_match(const char *pattern, size_t pattern_len, const char *reply, size_t reply_len) {
+    if (!bridge_initialized) {
+        uart_bridge_init();
+    }
+    if (pattern == NULL || pattern_len == 0 || pattern_len > MAX_PATTERN_LEN) {
+        return false;
+    }
+    if (reply != NULL && reply_len > MAX_REPLY_LEN) {
+        return false;
+    }
+
+    match_active = false;
+    match_found = false;
+    if (match_sem) {
+        xSemaphoreTake(match_sem, 0);
+    }
+
+    memcpy(match_pattern, pattern, pattern_len);
+    match_pattern_len = pattern_len;
+    match_curr_idx = 0;
+    compute_kmp_table(match_pattern, match_pattern_len, kmp_next);
+
+    if (reply != NULL && reply_len > 0) {
+        memcpy(match_reply, reply, reply_len);
+        match_reply_len = reply_len;
+    } else {
+        match_reply_len = 0;
+    }
+
+    match_active = true;
+    return true;
+}
+
+bool uart_bridge_is_matched(void) {
+    return match_found;
+}
+
+void uart_bridge_clear_match(void) {
+    match_active = false;
+    match_found = false;
+    match_pattern_len = 0;
+    match_curr_idx = 0;
+    match_reply_len = 0;
+    if (match_sem) {
+        xSemaphoreTake(match_sem, 0);
+    }
+}
+
+bool uart_bridge_wait_for_slice(uint32_t slice_ms) {
+    if (match_found) return true;
+    if (!match_sem) return false;
+    return (xSemaphoreTake(match_sem, pdMS_TO_TICKS(slice_ms)) == pdTRUE);
+}
+
 void uart_bridge_task(void *arg) {
     uint8_t buf[512];
 
@@ -139,8 +235,33 @@ void uart_bridge_task(void *arg) {
             uint32_t to_read = (sizeof(buf) < cdc_write_avail) ? sizeof(buf) : cdc_write_avail;
             int rx_len = uart_read_bytes(UART_NUM, buf, to_read, pdMS_TO_TICKS(5));
             if (rx_len > 0) {
+                // Forward immediately to host USB CDC1
                 tud_cdc_n_write(CDC_INTERFACE, buf, rx_len);
                 tud_cdc_n_write_flush(CDC_INTERFACE);
+
+                // Hardware/C-level pattern matching on incoming target stream
+                if (match_active && match_pattern_len > 0) {
+                    for (int i = 0; i < rx_len; i++) {
+                        char c = (char)buf[i];
+                        while (match_curr_idx > 0 && c != match_pattern[match_curr_idx]) {
+                            match_curr_idx = kmp_next[match_curr_idx - 1];
+                        }
+                        if (c == match_pattern[match_curr_idx]) {
+                            match_curr_idx++;
+                            if (match_curr_idx == match_pattern_len) {
+                                match_found = true;
+                                match_active = false;
+                                if (match_reply_len > 0) {
+                                    uart_write_bytes(UART_NUM, match_reply, match_reply_len);
+                                }
+                                if (match_sem) {
+                                    xSemaphoreGive(match_sem);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
 
