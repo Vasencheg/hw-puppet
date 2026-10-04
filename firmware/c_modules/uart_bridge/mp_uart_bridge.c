@@ -3,6 +3,7 @@
 #include "py/objstr.h"
 #include "uart_bridge.h"
 #include "pattern_matcher.h"
+#include "hw_puppet_version.h"
 
 // ==============================================================================
 // 1. Subsystem Wiring & Lifecycle
@@ -255,9 +256,36 @@ static mp_obj_t mp_uart_bridge_get_baud(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_uart_bridge_get_baud_obj, mp_uart_bridge_get_baud);
 
+// --- Version Information (from hw_puppet_version module) ---
+static const mp_obj_str_t mp_hw_puppet_version_obj = {
+    .base = { &mp_type_str },
+    .hash = 0,
+    .len = sizeof(HW_PUPPET_VERSION_STR) - 1,
+    .data = (const byte *)HW_PUPPET_VERSION_STR,
+};
+
+static const mp_obj_str_t mp_hw_puppet_git_hash_obj = {
+    .base = { &mp_type_str },
+    .hash = 0,
+    .len = sizeof(HW_PUPPET_GIT_HASH_STR) - 1,
+    .data = (const byte *)HW_PUPPET_GIT_HASH_STR,
+};
+
+static mp_obj_t mp_uart_bridge_get_version(void) {
+    mp_obj_t dict = mp_obj_new_dict(3);
+    mp_obj_dict_store(dict, MP_ROM_QSTR(MP_QSTR_version), (mp_obj_t)&mp_hw_puppet_version_obj);
+    mp_obj_dict_store(dict, MP_ROM_QSTR(MP_QSTR_git_hash), (mp_obj_t)&mp_hw_puppet_git_hash_obj);
+    mp_obj_dict_store(dict, MP_ROM_QSTR(MP_QSTR_build_date), mp_obj_new_str(hw_puppet_build_date(), strlen(hw_puppet_build_date())));
+    return dict;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_uart_bridge_get_version_obj, mp_uart_bridge_get_version);
+
 // --- Module Globals Table ---
 static const mp_rom_map_elem_t mp_module_uart_bridge_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__),      MP_ROM_QSTR(MP_QSTR_uart_bridge) },
+    { MP_ROM_QSTR(MP_QSTR___version__),   MP_ROM_PTR(&mp_hw_puppet_version_obj) },
+    { MP_ROM_QSTR(MP_QSTR_VERSION),       MP_ROM_PTR(&mp_hw_puppet_version_obj) },
+    { MP_ROM_QSTR(MP_QSTR_get_version),   MP_ROM_PTR(&mp_uart_bridge_get_version_obj) },
     { MP_ROM_QSTR(MP_QSTR_on_match),      MP_ROM_PTR(&mp_uart_bridge_on_match_obj) },
     { MP_ROM_QSTR(MP_QSTR_clear_matches), MP_ROM_PTR(&mp_uart_bridge_clear_matches_obj) },
     { MP_ROM_QSTR(MP_QSTR_wait_for),      MP_ROM_PTR(&mp_uart_bridge_wait_for_obj) },
