@@ -28,12 +28,12 @@ Designed to pair seamlessly with [**`ae-hw-bridge`**](https://github.com/Vasench
              │    HW-PUPPET    │ (ESP32-S3 @ MicroPython v1.29.0 + TinyUSB)
              │                 │
              │  ┌───────────┐  │
-             │  │   CDC 0   │  │ Control Channel (/dev/hw-puppet-control or /dev/ttyACM0)
+             │  │   CDC 0   │  │ Control Channel (/dev/ttyACM0 or /dev/serial/by-id/...)
              │  │ (Raw REPL)│  │ -> Zero-flash RAM execution for pin manipulation
              │  └─────┬─────┘  │
              │        │        │
              │  ┌─────┴─────┐  │
-             │  │   CDC 1   │  │ UART Console Bridge (/dev/hw-puppet-uart or /dev/ttyACM1)
+             │  │   CDC 1   │  │ UART Console Bridge (/dev/ttyACM1 or /dev/serial/by-id/...)
              │  │(Raw Bridge│  │ -> Transparent hardware UART up to 921600+ baud
              │  └─────┬─────┘  │
              └────────┼────────┘
@@ -74,8 +74,8 @@ To avoid confusion across tools, build scripts, USB descriptors, and udev rules,
 | **USB Product Name** | `HW-PUPPET` | USB Device Descriptor product string |
 | **USB CDC 0 Interface** | `HW-PUPPET REPL` | Primary control & MicroPython Raw REPL interface string |
 | **USB CDC 1 Interface** | `HW-PUPPET UART Bridge` | Secondary high-speed UART console stream interface string |
-| **Linux Udev Control Node** | `/dev/hw-puppet-control` | Stable symlink to CDC 0 (symlinked to `/dev/ttyACM0`) |
-| **Linux Udev UART Node** | `/dev/hw-puppet-uart` | Stable symlink to CDC 1 (symlinked to `/dev/ttyACM1`) |
+| **Linux Udev Permissions** | `MODE="0666"` | Read/write access for non-root users on both CDC channels |
+| **Hardware Badge** | `hw_puppet.set_badge("name")` | Persistent identifier in ESP-IDF NVS surviving reboots & LittleFS formats |
 | **Python / C Packages** | `hw_puppet`, `hw_puppet.uart_bridge` | Root namespace package (`import hw_puppet`) and bridge submodule |
 
 ---
@@ -138,9 +138,13 @@ Bytes from UART1 RX are checked in $O(1)$ time without interrupting transparent 
 import hw_puppet
 from hw_puppet import uart_bridge
 
-# Inspect platform version and build info:
+# Inspect platform metadata and active hardware badge:
 print(f"HW-PUPPET: v{hw_puppet.__version__}")
 print(hw_puppet.info())
+
+# Persistent hardware badge in NVS (survives power cycles and filesystem wipes):
+hw_puppet.set_badge("jetson-bench")
+print("Board badge:", hw_puppet.get_badge())
 
 # 1. Catch bootloader prompt and auto-reply with a space within microseconds:
 if uart_bridge.wait_for("Hit any key to stop autoboot", reply=" ", timeout_ms=5000):
@@ -154,18 +158,17 @@ if uart_bridge.wait_for("login:", timeout_ms=15000):
 uart_bridge.write(b"root\n")
 ```
 
+See [**docs/badge_api.md**](docs/badge_api.md) and [**docs/uart_bridge_api.md**](docs/uart_bridge_api.md) for complete API references.
+
 ---
 
 ## 6. Quickstart
 
 ### 6.1 Install Udev Rules (Linux)
-Install udev rules to get persistent, human-readable symlinks:
+Configure non-root read/write access (`MODE="0666"`) for HW-Puppet USB CDC ports:
 ```bash
 ./build.sh install-rules
 ```
-This registers:
-* `/dev/hw-puppet-control` -> CDC 0 (MicroPython REPL)
-* `/dev/hw-puppet-uart` -> CDC 1 (Target UART console)
 
 ### 6.2 Flash Pre-built Firmware
 Connect the ESP32-S3 USB port in download mode (hold BOOT, tap RESET, release BOOT):
@@ -173,19 +176,25 @@ Connect the ESP32-S3 USB port in download mode (hold BOOT, tap RESET, release BO
 esptool.py -p /dev/ttyACM0 -b 460800 write_flash 0x0 build/firmware.bin
 ```
 
-### 6.3 Monitor Target Console
-Open CDC 1 to see target boot logs:
+### 6.3 Label Your Board (Persistent Hardware Badge)
+Assign a unique badge name so host tools (`ae-hw-bridge`) identify it regardless of USB port enumeration:
 ```bash
-./tools/monitor_target.py
-# Or with any serial terminal:
-tio /dev/hw-puppet-uart
+./tools/badge.py --port /dev/ttyACM0 --set jetson-bench
 ```
 
-### 6.4 Execute Control Scripts on the Board
-Run Python scripts directly on the ESP32-S3 in RAM (no flash wear):
+### 6.4 Monitor Target Console
+Open CDC 1 to stream target boot logs:
 ```bash
-./tools/run_script.py examples/jetson_reset.py
-./tools/run_script.py examples/jetson_recovery.py
+./tools/monitor_target.py --port /dev/ttyACM1
+# Or with any serial terminal:
+tio /dev/ttyACM1
+```
+
+### 6.5 Execute Control Scripts on the Board
+Run Python scripts directly on the ESP32-S3 in RAM (zero flash wear):
+```bash
+./tools/run_script.py examples/jetson_reset.py --port /dev/ttyACM0
+./tools/run_script.py examples/jetson_recovery.py --port /dev/ttyACM0
 ```
 
 ---
@@ -212,20 +221,26 @@ Output artifacts are copied to `build/`:
 ```text
 hw-puppet/
 ├── build.sh                   # Unified firmware build & udev install script
-├── build/                     # Compiled firmware binaries
+├── docs/                      # Reference manuals & guides
+│   ├── README.md              # Documentation index
+│   ├── badge_api.md           # Persistent Hardware Badge API & NVS reference
+│   └── uart_bridge_api.md     # FreeRTOS UART bridge & Pattern Matcher reference
 ├── firmware/                  # ESP32-S3 firmware sources
 │   ├── boards/HW_PUPPET/      # Board definition, pins, TinyUSB config & board.c
 │   ├── c_modules/             # Native MicroPython C modules
+│   │   ├── hw_puppet/         # Metadata & NVS persistent badge driver
 │   │   ├── uart_bridge/       # Transparent CDC1 <-> UART1 bridge driver
+│   │   ├── pattern_matcher/   # Streaming KMP pattern engine
 │   │   └── micropython.cmake  # User C modules registration
 │   └── patches/               # Clean git patches for MicroPython (Dual CDC stack)
 ├── lib/
 │   └── micropython/           # MicroPython upstream git submodule (v1.29.0)
 ├── tools/                     # Standalone host CLI tools
+│   ├── badge.py               # Read, set, and clear persistent board badge
 │   ├── run_script.py          # RAM script runner via MicroPython Raw REPL
 │   └── monitor_target.py      # Target UART console monitor
 ├── examples/                  # Target control scripts (reset, recovery, power)
-└── udev/                      # Linux udev rules for persistent /dev/ symlinks
+└── udev/                      # Linux udev rules for non-root CDC permissions
 ```
 
 ---

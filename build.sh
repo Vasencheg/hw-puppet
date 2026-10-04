@@ -41,9 +41,7 @@ elif [ "$1" = "install" ] || [ "$1" = "install-rules" ] || [ "$1" = "install-ude
     sudo udevadm control --reload-rules
     sudo udevadm trigger
     echo "Udev rules installed successfully."
-    echo "Device symlinks:"
-    echo "  /dev/hw-puppet-control -> CDC 0 (MicroPython REPL)"
-    echo "  /dev/hw-puppet-uart    -> CDC 1 (Target UART console)"
+    echo "CDC 0 (REPL) and CDC 1 (UART bridge) granted non-root access (MODE=0666)."
     exit 0
 elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "Usage: $0 [clean | --clean | -c | install | --help]"

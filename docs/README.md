@@ -10,3 +10,8 @@ This directory contains reference documentation and guides for HW-PUPPET firmwar
   - `Match` handle object lifecycle and context manager
   - Synchronous `wait_for` helper
   - Usage examples (Auto-reply, Boot Watcher, Debouncing)
+- [Hardware Badge API](badge_api.md)
+  - Persistent hardware identifier stored in ESP32-S3 NVS
+  - MicroPython C module API (`get_badge`, `set_badge`, `info`)
+  - Host CLI utility (`tools/badge.py`)
+  - Multi-puppet orchestration with `ae-hw-bridge`
