@@ -128,23 +128,38 @@ The firmware reserves only the hardware UART peripheral lines for the transparen
 
 ---
 
-## 5. On-Device UART Pattern Matcher & Auto-Reply
+## 5. Hardware Identity & Persistent Badges (NVS)
+
+In multi-board test setups or HIL racks, Linux assigns dynamic `/dev/ttyACM*` port numbers depending on USB hub enumeration order. To uniquely identify each board without relying on volatile port numbers or conflicting udev symlinks, `hw-puppet` supports **persistent hardware badges** stored directly in the ESP32-S3 Non-Volatile Storage (**NVS**).
+
+A badge is a permanent label (e.g. `jetson-bench`, `stm32-tester`) that survives reboots, power cycles, and LittleFS filesystem wipes.
+
+```python
+import hw_puppet
+
+# Inspect platform version, build metadata, and active badge:
+print(f"HW-PUPPET: v{hw_puppet.__version__}")
+print(hw_puppet.info())
+
+# Set persistent hardware badge in NVS:
+hw_puppet.set_badge("jetson-bench")
+
+# Query active badge:
+print("Board badge:", hw_puppet.get_badge())
+```
+
+See [**docs/badge_api.md**](docs/badge_api.md) for the complete Hardware Badge reference.
+
+---
+
+## 6. On-Device UART Pattern Matcher & Auto-Reply
 
 To eliminate the 10–50 ms USB-roundtrip latency when synchronizing with target boot sequences (e.g. stopping U-Boot autoboot in a 1-second window), `hw-puppet` implements an **on-the-fly streaming KMP matcher** in native C on Core 0.
 
 Bytes from UART1 RX are checked in $O(1)$ time without interrupting transparent streaming to USB CDC 1.
 
 ```python
-import hw_puppet
 from hw_puppet import uart_bridge
-
-# Inspect platform metadata and active hardware badge:
-print(f"HW-PUPPET: v{hw_puppet.__version__}")
-print(hw_puppet.info())
-
-# Persistent hardware badge in NVS (survives power cycles and filesystem wipes):
-hw_puppet.set_badge("jetson-bench")
-print("Board badge:", hw_puppet.get_badge())
 
 # 1. Catch bootloader prompt and auto-reply with a space within microseconds:
 if uart_bridge.wait_for("Hit any key to stop autoboot", reply=" ", timeout_ms=5000):
@@ -158,31 +173,31 @@ if uart_bridge.wait_for("login:", timeout_ms=15000):
 uart_bridge.write(b"root\n")
 ```
 
-See [**docs/badge_api.md**](docs/badge_api.md) and [**docs/uart_bridge_api.md**](docs/uart_bridge_api.md) for complete API references.
+See [**docs/uart_bridge_api.md**](docs/uart_bridge_api.md) for the complete UART Bridge and Pattern Matcher reference.
 
 ---
 
-## 6. Quickstart
+## 7. Quickstart
 
-### 6.1 Install Udev Rules (Linux)
+### 7.1 Install Udev Rules (Linux)
 Configure non-root read/write access (`MODE="0666"`) for HW-Puppet USB CDC ports:
 ```bash
 ./build.sh install-rules
 ```
 
-### 6.2 Flash Pre-built Firmware
+### 7.2 Flash Pre-built Firmware
 Connect the ESP32-S3 USB port in download mode (hold BOOT, tap RESET, release BOOT):
 ```bash
 esptool.py -p /dev/ttyACM0 -b 460800 write_flash 0x0 build/firmware.bin
 ```
 
-### 6.3 Label Your Board (Persistent Hardware Badge)
+### 7.3 Label Your Board (Persistent Hardware Badge)
 Assign a unique badge name so host tools (`ae-hw-bridge`) identify it regardless of USB port enumeration:
 ```bash
 ./tools/badge.py --port /dev/ttyACM0 --set jetson-bench
 ```
 
-### 6.4 Monitor Target Console
+### 7.4 Monitor Target Console
 Open CDC 1 to stream target boot logs:
 ```bash
 ./tools/monitor_target.py --port /dev/ttyACM1
@@ -190,7 +205,7 @@ Open CDC 1 to stream target boot logs:
 tio /dev/ttyACM1
 ```
 
-### 6.5 Execute Control Scripts on the Board
+### 7.5 Execute Control Scripts on the Board
 Run Python scripts directly on the ESP32-S3 in RAM (zero flash wear):
 ```bash
 ./tools/run_script.py examples/jetson_reset.py --port /dev/ttyACM0
@@ -199,7 +214,7 @@ Run Python scripts directly on the ESP32-S3 in RAM (zero flash wear):
 
 ---
 
-## 7. Building Firmware from Source
+## 8. Building Firmware from Source
 
 ### Prerequisites
 * ESP-IDF v5.4+ installed and activated (`. $IDF_PATH/export.sh`)
@@ -216,7 +231,7 @@ Output artifacts are copied to `build/`:
 
 ---
 
-## 8. Repository Structure
+## 9. Repository Structure
 
 ```text
 hw-puppet/
@@ -245,7 +260,7 @@ hw-puppet/
 
 ---
 
-## 9. Ecosystem & Integrations
+## 10. Ecosystem & Integrations
 
 While `hw-puppet` functions completely standalone via raw REPL, Python scripts, or terminal emulators (`tio`, `minicom`), it is engineered as the core hardware execution engine for the [**`ae-hw-bridge`**](https://github.com/Vasencheg/ae-hw-bridge) (Agents Engine Hardware Bridge) ecosystem.
 
