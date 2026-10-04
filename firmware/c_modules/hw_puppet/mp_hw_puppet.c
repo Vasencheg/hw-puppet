@@ -51,6 +51,7 @@ static const mp_rom_map_elem_t mp_module_hw_puppet_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__),      MP_ROM_QSTR(MP_QSTR_hw_puppet) },
     { MP_ROM_QSTR(MP_QSTR___version__),   MP_ROM_PTR(&mp_hw_puppet_version_obj) },
     { MP_ROM_QSTR(MP_QSTR_VERSION),       MP_ROM_PTR(&mp_hw_puppet_version_obj) },
+    { MP_ROM_QSTR(MP_QSTR_version),       MP_ROM_PTR(&mp_hw_puppet_version_obj) },
     { MP_ROM_QSTR(MP_QSTR_info),          MP_ROM_PTR(&mp_hw_puppet_info_obj) },
     // Builtin Submodules: allows 'from hw_puppet import uart_bridge' and 'import hw_puppet.uart_bridge'
     { MP_ROM_QSTR(MP_QSTR_uart_bridge),   MP_ROM_PTR(&mp_module_uart_bridge) },
