@@ -2,7 +2,7 @@
 
 **The Puppet Master for Embedded Target Boards**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![MicroPython: v1.29.0](https://img.shields.io/badge/MicroPython-v1.29.0-blue.svg)](https://micropython.org/)
 [![Hardware: ESP32--S3](https://img.shields.io/badge/Hardware-ESP32--S3-red.svg)](https://www.espressif.com/)
 
