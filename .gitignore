@@ -15,11 +15,8 @@ build-*/
 .ninja_log
 compile_commands.json
 
-# Keep precompiled release binaries in build/
-build/*
-!build/firmware.bin
-!build/bootloader.bin
-!build/partition-table.bin
+# Firmware build output (precompiled binaries are published in GitHub Releases)
+build/
 
 # IDE / OS
 .vscode/
