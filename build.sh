@@ -88,6 +88,16 @@ fi
 
 # 3. Check ESP-IDF environment
 if ! command -v idf.py &> /dev/null; then
+    if [ -n "$IDF_PATH" ] && [ -f "$IDF_PATH/export.sh" ]; then
+        echo "-> Activating ESP-IDF from $IDF_PATH/export.sh..."
+        . "$IDF_PATH/export.sh"
+    elif [ -f "/opt/esp/idf/export.sh" ]; then
+        echo "-> Activating ESP-IDF from /opt/esp/idf/export.sh..."
+        . "/opt/esp/idf/export.sh"
+    fi
+fi
+
+if ! command -v idf.py &> /dev/null; then
     echo ""
     echo "ERROR: idf.py not found in PATH."
     echo "Please activate ESP-IDF 5.4+ first (e.g. '. export.sh')."

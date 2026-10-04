@@ -37,6 +37,7 @@ jobs:
 
       - name: Build Firmware
         run: |
+          . /opt/esp/idf/export.sh || . $IDF_PATH/export.sh
           ./build.sh --clean
 
       - name: Inspect Build Artifacts
