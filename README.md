@@ -5,10 +5,15 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![MicroPython: v1.29.0](https://img.shields.io/badge/MicroPython-v1.29.0-blue.svg)](https://micropython.org/)
 [![Hardware: ESP32--S3](https://img.shields.io/badge/Hardware-ESP32--S3-red.svg)](https://www.espressif.com/)
+[![MCP: ae-hw-bridge](https://img.shields.io/badge/MCP-ae--hw--bridge-green.svg)](https://github.com/Vasencheg/ae-hw-bridge)
 
 **HW Puppet** (`hw-puppet`) is a standalone, open-source Hardware-in-the-Loop (HIL) automation bridge and test harness.
 
-Flash the firmware onto an off-the-shelf **ESP32-S3-DevKitC-1** development board, and it immediately becomes a dedicated **HW Puppet** device that "pulls the strings" on your target embedded boards: controlling hardware lines (RESET, RECOVERY/BOOT, POWER relay, GPIOs) and streaming high-speed UART consoles over a single physical USB Type-C connection.
+Built on [**MicroPython**](https://micropython.org/) (v1.29.0) with a custom [TinyUSB](https://github.com/hathach/tinyusb) Dual-CDC stack. Flash the firmware onto an off-the-shelf **ESP32-S3-DevKitC-1** development board, and it immediately becomes a dedicated **HW Puppet** device that "pulls the strings" on your target embedded boards: controlling hardware lines (RESET, RECOVERY/BOOT, POWER relay, GPIOs) and streaming high-speed UART consoles over a single physical USB Type-C connection.
+
+Designed to pair seamlessly with [**`ae-hw-bridge`**](https://github.com/Vasencheg/ae-hw-bridge) (the host FastMCP gateway that connects physical boards to AI coding agents like Claude, Cursor, and Agents Engine), or run completely standalone with CLI scripts and CI/CD pipelines.
+
+📦 **Precompiled Binaries:** Ready-to-flash firmware is available on the [**Releases**](https://github.com/Vasencheg/hw-puppet/releases) page.
 
 ---
 
@@ -47,8 +52,8 @@ Flash the firmware onto an off-the-shelf **ESP32-S3-DevKitC-1** development boar
 
 ### Key Technical Pillars
 * **Single Physical Connection:** A single USB Type-C cable powers the ESP32-S3 and provides both control and data paths.
-* **USB Composite Device (Dual CDC):** Powered by custom TinyUSB descriptors:
-  * **CDC 0 (`/dev/hw-puppet-control` / `/dev/ttyACM0`):** MicroPython REPL (115200 baud). Host executes scripts directly in RAM using zero-flash Raw REPL RPC.
+* **USB Composite Device (Dual CDC):** Powered by custom [TinyUSB](https://github.com/hathach/tinyusb) descriptors:
+  * **CDC 0 (`/dev/hw-puppet-control` / `/dev/ttyACM0`):** [MicroPython](https://micropython.org/) REPL (115200 baud). Host executes scripts directly in RAM using zero-flash Raw REPL RPC.
   * **CDC 1 (`/dev/hw-puppet-uart` / `/dev/ttyACM1`):** Transparent hardware UART bridge connected to the target console (default 115200 baud, configurable up to 921600+).
 * **Standard Hardware Control:** Native `machine.Pin`, `machine.Timer`, `neopixel` (WS2812 status LED), and `Pin.irq` without custom driver lock-in.
 * **On-Device Hardware Pattern Matcher:** Real-time C-level pattern detection and microsecond-level auto-reply directly on Core 0 (`uart_bridge.wait_for`, `uart_bridge.arm_match`).
@@ -188,7 +193,7 @@ Run Python scripts directly on the ESP32-S3 in RAM (no flash wear):
 ## 7. Building Firmware from Source
 
 ### Prerequisites
-* ESP-IDF v5.4+ installed and activated (`. $IDF_PATH/export.sh` or `get_idf`)
+* ESP-IDF v5.4+ installed and activated (`. $IDF_PATH/export.sh`)
 * CMake & Ninja
 
 ### Build
