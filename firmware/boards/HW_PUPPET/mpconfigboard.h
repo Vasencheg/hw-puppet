@@ -30,6 +30,10 @@
 #define MICROPY_PY_MACHINE_I2C_TARGET (0)
 
 #define MODULE_UART_BRIDGE_ENABLED    (1)
+#define MODULE_HW_PUPPET_ENABLED      (1)
+
+// Enable built-in package and submodule resolution (import hw_puppet.uart_bridge)
+#define MICROPY_MODULE_BUILTIN_SUBPACKAGES (1)
 
 void HW_PUPPET_board_startup(void);
 #define MICROPY_BOARD_STARTUP         HW_PUPPET_board_startup

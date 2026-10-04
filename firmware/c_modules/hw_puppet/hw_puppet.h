@@ -1,5 +1,5 @@
-#ifndef HW_PUPPET_VERSION_H
-#define HW_PUPPET_VERSION_H
+#ifndef HW_PUPPET_H
+#define HW_PUPPET_H
 
 #include <stddef.h>
 
@@ -22,8 +22,13 @@
 #define HW_PUPPET_BUILD_DATE_STR __DATE__ " " __TIME__
 #endif
 
+#ifndef HW_PUPPET_PLATFORM_STR
+#define HW_PUPPET_PLATFORM_STR "ESP32-S3"
+#endif
+
 const char *hw_puppet_version_string(void);
 const char *hw_puppet_git_hash(void);
 const char *hw_puppet_build_date(void);
+const char *hw_puppet_platform(void);
 
-#endif // HW_PUPPET_VERSION_H
+#endif // HW_PUPPET_H

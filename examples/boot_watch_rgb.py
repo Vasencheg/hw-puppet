@@ -11,7 +11,7 @@ and reflects status on onboard WS2812 RGB LED:
 import time
 from machine import Pin
 import neopixel
-import uart_bridge
+from hw_puppet import uart_bridge
 
 # --- Configuration & Palette ---
 PIN_RST = 12   # Jetson Reset relay (active LOW: 0=closed, 1=open)

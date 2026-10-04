@@ -71,7 +71,7 @@ To avoid confusion across tools, build scripts, USB descriptors, and udev rules,
 | **USB CDC 1 Interface** | `HW-PUPPET UART Bridge` | Secondary high-speed UART console stream interface string |
 | **Linux Udev Control Node** | `/dev/hw-puppet-control` | Stable symlink to CDC 0 (symlinked to `/dev/ttyACM0`) |
 | **Linux Udev UART Node** | `/dev/hw-puppet-uart` | Stable symlink to CDC 1 (symlinked to `/dev/ttyACM1`) |
-| **Python / C Packages** | `hw_puppet`, `uart_bridge` | Python import identifiers and native C module names |
+| **Python / C Packages** | `hw_puppet`, `hw_puppet.uart_bridge` | Root namespace package (`import hw_puppet`) and bridge submodule |
 
 ---
 
@@ -130,7 +130,12 @@ To eliminate the 10–50 ms USB-roundtrip latency when synchronizing with target
 Bytes from UART1 RX are checked in $O(1)$ time without interrupting transparent streaming to USB CDC 1.
 
 ```python
-import uart_bridge
+import hw_puppet
+from hw_puppet import uart_bridge
+
+# Inspect platform version and build info:
+print(f"HW-PUPPET: v{hw_puppet.__version__}")
+print(hw_puppet.info())
 
 # 1. Catch bootloader prompt and auto-reply with a space within microseconds:
 if uart_bridge.wait_for("Hit any key to stop autoboot", reply=" ", timeout_ms=5000):
@@ -142,12 +147,6 @@ if uart_bridge.wait_for("login:", timeout_ms=15000):
 
 # 3. Direct UART transmission:
 uart_bridge.write(b"root\n")
-
-# 4. Asynchronous trigger check:
-uart_bridge.arm_match("Kernel panic")
-# ... perform tests ...
-if uart_bridge.matched():
-    print("Target crashed with kernel panic!")
 ```
 
 ---

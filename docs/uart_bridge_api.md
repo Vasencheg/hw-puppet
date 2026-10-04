@@ -1,6 +1,6 @@
-# `uart_bridge` MicroPython API & Pattern Matcher
+# `hw_puppet.uart_bridge` MicroPython API & Pattern Matcher
 
-The `uart_bridge` module is a high-performance C-extension built directly into the HW-PUPPET MicroPython firmware. It runs a dedicated FreeRTOS task on ESP32-S3 **Core 0**, providing transparent, full-duplex forwarding between the hardware UART (`GPIO 43 TX` / `GPIO 44 RX`) and host USB CDC1 (`/dev/hw-puppet-uart`).
+The `hw_puppet.uart_bridge` module is a high-performance C-extension built directly into the HW-PUPPET MicroPython firmware (`from hw_puppet import uart_bridge`). It runs a dedicated FreeRTOS task on ESP32-S3 **Core 0**, providing transparent, full-duplex forwarding between the hardware UART (`GPIO 43 TX` / `GPIO 44 RX`) and host USB CDC1 (`/dev/hw-puppet-uart`).
 
 Simultaneously, the C engine inspects the incoming target byte stream using the **Knuth-Morris-Pratt (KMP)** algorithm in $O(1)$ time per byte with **zero dynamic heap allocations**, zero VM blocking, and zero loss of UART stream data.
 
@@ -95,7 +95,7 @@ Transmits raw data directly to the target hardware UART.
 
 ### Example 1: Basic Event Notification
 ```python
-import uart_bridge
+from hw_puppet import uart_bridge
 
 def on_prompt(pattern):
     print(f"Target shell ready! (Matched: {pattern})")
@@ -112,7 +112,7 @@ match = uart_bridge.on_match("tegra-ubuntu:", on_prompt, once=True)
 ### Example 2: Ultra-Fast U-Boot Autoboot Stop (Auto-Reply)
 Immediate response in under 1 ms directly from Core 0 without waiting for Python VM scheduling:
 ```python
-import uart_bridge
+from hw_puppet import uart_bridge
 
 def on_uboot(pattern):
     print("U-Boot autoboot intercepted!")
@@ -130,7 +130,7 @@ match = uart_bridge.on_match(
 
 ### Example 3: Scoped Trigger using Context Manager
 ```python
-import uart_bridge
+from hw_puppet import uart_bridge
 import time
 
 def on_panic(pattern):
@@ -147,7 +147,7 @@ with uart_bridge.on_match("Kernel panic", on_panic) as m:
 
 ### Example 4: Multi-Pattern Boot Monitor (Warnings, Errors, Shell)
 ```python
-import uart_bridge
+from hw_puppet import uart_bridge
 import time
 
 def on_warn(p):

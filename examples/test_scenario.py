@@ -6,9 +6,11 @@ directly in ESP32-S3 RAM without touching Flash memory.
 
 import time
 from machine import Pin
-import uart_bridge
+import hw_puppet
+from hw_puppet import uart_bridge
 
-print("=== [HW-PUPPET] Running Test Scenario ===")
+print(f"=== [HW-PUPPET v{hw_puppet.__version__}] Running Test Scenario ===")
+print(f"Platform info: {hw_puppet.info()}")
 
 # 1. Configure hardware UART bridge baudrate
 print(f"Current UART bridge baudrate: {uart_bridge.get_baud()} baud")
