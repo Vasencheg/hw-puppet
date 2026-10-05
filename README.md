@@ -15,6 +15,14 @@ Designed to pair seamlessly with [**`ae-hw-bridge`**](https://github.com/Vasench
 
 📦 **Precompiled Binaries:** Ready-to-flash firmware is available on the [**Releases**](https://github.com/Vasencheg/hw-puppet/releases) page.
 
+> [!NOTE]
+> **Execution Context for Developers & AI Agents:**
+> `hw-puppet` is **firmware** running inside the ESP32-S3 microcontroller, not a host Python package (`pip install hw_puppet` does not exist).
+> To interact with the device from your host computer (Python scripts, tests, AI coding agents):
+> - **AI Agents & MCP:** Use [**`ae-hw-bridge`**](https://github.com/Vasencheg/ae-hw-bridge) (the official host FastMCP gateway).
+> - **Host Python Scripts:** Send MicroPython code over CDC 0 Raw REPL (see [`examples/host_client.py`](examples/host_client.py)).
+> - **For LLMs & AI Coding Tools:** See [**`llms.txt`**](llms.txt) for quick machine-readable API contracts and guidelines.
+
 ---
 
 ## 1. Architecture

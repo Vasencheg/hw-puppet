@@ -15,3 +15,6 @@ This directory contains reference documentation and guides for HW-PUPPET firmwar
   - MicroPython C module API (`get_badge`, `set_badge`, `info`)
   - Host CLI utility (`tools/badge.py`)
   - Multi-puppet orchestration with `ae-hw-bridge`
+- [AI Assistant Reference (llms.txt)](../llms.txt)
+  - Machine-readable API contracts and host integration guide for LLMs
+

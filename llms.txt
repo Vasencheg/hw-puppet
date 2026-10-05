@@ -1,0 +1,92 @@
+# hw-puppet
+
+> Dedicated Dual-CDC USB hardware test harness and HIL automation firmware for ESP32-S3.
+
+`hw-puppet` turns an ESP32-S3 development board into a hardware test harness that controls embedded target boards (DUTs: NVIDIA Jetson, STM32, Raspberry Pi, ESP32, etc.) over a single USB Type-C cable.
+
+## ⚠️ Important Note on Execution Context
+
+- **`hw-puppet` is FIRMWARE for the ESP32-S3 microcontroller**, NOT a Python package for your host PC (`pip install hw_puppet` does not exist).
+- Code using `import hw_puppet`, `import hw_puppet.uart_bridge`, or `from machine import Pin` runs **inside the MicroPython VM on the ESP32-S3**.
+- To control `hw-puppet` from an AI agent or host PC, use the host FastMCP gateway [**`ae-hw-bridge`**](https://github.com/Vasencheg/ae-hw-bridge), or send commands to the CDC 0 Raw REPL over serial (see `examples/host_client.py`).
+
+## Dual-CDC USB Architecture
+
+A single USB-C cable provides two independent USB CDC channels:
+1. **CDC 0 (`bInterfaceNumber == 00`) - MicroPython Raw REPL**:
+   - Baud rate: 115200 (USB Full-Speed native OTG).
+   - Zero-Flash wear: Host sends Python code that compiles and runs in ESP32 RAM.
+   - Controls physical GPIO lines (Reset, Boot/Recovery, Power relay, LEDs).
+2. **CDC 1 (`bInterfaceNumber == 02`) - Transparent Hardware UART Bridge**:
+   - Baud rate: Configurable up to 921600+ baud.
+   - Streams target UART console directly to host.
+   - Features on-chip C-level pattern matcher running on FreeRTOS Core 0.
+
+## Built-in MicroPython C-Modules (Inside Firmware)
+
+### 1. `hw_puppet` (Core & Persistent Badge)
+Stored in ESP-IDF NVS, survives power cycles, reboots, and LittleFS formats:
+```python
+import hw_puppet
+
+# Read device telemetry: platform, badge, version, build date, git hash
+info = hw_puppet.info()
+
+# Persistent hardware badge management (NVS)
+badge = hw_puppet.get_badge()        # Returns string or None
+hw_puppet.set_badge("jetson-bench")   # Stores badge in NVS
+```
+
+### 2. `hw_puppet.uart_bridge` (High-Speed Stream & Pattern Matcher)
+On-chip FreeRTOS background task with microsecond hardware auto-replies:
+```python
+from hw_puppet import uart_bridge
+
+# Register an event-driven pattern trigger
+match = uart_bridge.on_match(
+    pattern=r"login:",
+    callback=lambda m: print("Login prompt reached!"),
+    auto_reply=b"root\r\n",     # Hardware auto-reply without host round-trip
+    oneshot=True,
+)
+
+# Synchronous wait helper
+matched = uart_bridge.wait_for(r"Kernel panic|Ready", timeout_ms=5000)
+
+# Unregister / Clear
+match.unregister()
+uart_bridge.clear_matches()
+stats = uart_bridge.stats()
+```
+
+### 3. Native MicroPython Modules
+- `from machine import Pin, UART, Timer`
+- `import neopixel` (onboard WS2812 status LED, default GPIO 48)
+
+## Host Integration Methods
+
+### Method 1: AI Agents & MCP (Recommended)
+Use [`ae-hw-bridge`](https://github.com/Vasencheg/ae-hw-bridge) on the host PC:
+```bash
+pip install ae-hw-bridge
+ae-hw-bridge-mcp
+```
+`ae-hw-bridge` automatically pairs CDC0 and CDC1 via sysfs parent device scanning, resolves badges, manages daemon concurrency, and exposes FastMCP tools (`send_target_command`, `read_target_console`, `wait_for_console_pattern`, etc.).
+
+### Method 2: Host Python Scripts (Raw REPL RPC)
+Send code strings to CDC 0 using Python's `pyserial`:
+- Send `b"\r\x03\x03\x01"` to enter Raw REPL.
+- Transmit code string terminated by `b"\x04"` (Ctrl-D).
+- Read response format: `b"OK"` + stdout + `b"\x04"` + stderr + `b"\x04>"`.
+- Reference implementation: `examples/host_client.py`.
+
+### Method 3: Badge Configuration CLI
+```bash
+./tools/badge.py --port /dev/ttyACM0                    # Query badge
+./tools/badge.py --port /dev/ttyACM0 --set my-bench    # Set badge
+```
+
+## Documentation Reference
+- `docs/uart_bridge_api.md`: Complete FreeRTOS UART bridge and pattern matcher reference.
+- `docs/badge_api.md`: Persistent NVS hardware badge API and CLI documentation.
+- `ae-hw-bridge`: https://github.com/Vasencheg/ae-hw-bridge
