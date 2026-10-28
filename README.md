@@ -220,6 +220,23 @@ Run Python scripts directly on the ESP32-S3 in RAM (zero flash wear):
 ./tools/run_script.py examples/jetson_recovery.py --port /dev/ttyACM0
 ```
 
+### 7.6 Worked Example: I2C Charger Bench
+[`examples/i2c_charger_bench/`](examples/i2c_charger_bench/) is a complete bench
+where HW Puppet acts as the **I2C master** rather than a reset-and-console
+driver: the board under test has no UART at all. It reads an LTC4162-L battery
+charger, a PCA9536 GPIO expander and an LM75B temperature sensor, and ships an
+interactive host console alongside a ready-made
+[`ae-hw-bridge`](https://github.com/Vasencheg/ae-hw-bridge) target definition
+under its `targets/` directory.
+
+It demonstrates two patterns that scale beyond a single script:
+* **A resident MicroPython package** in `/lib/pb` holding what the host cannot
+  — a soft timer watching a button for a long press, and chip settings that
+  must be replayed after the device resets itself.
+* **Deployment that cannot go stale:** each upload leaves a digest of its
+  sources on the board, and the target re-uploads automatically whenever the
+  files on disk no longer match.
+
 ---
 
 ## 8. Building Firmware from Source
@@ -262,7 +279,7 @@ hw-puppet/
 │   ├── badge.py               # Read, set, and clear persistent board badge
 │   ├── run_script.py          # RAM script runner via MicroPython Raw REPL
 │   └── monitor_target.py      # Target UART console monitor
-├── examples/                  # Target control scripts (reset, recovery, power)
+├── examples/                  # Target control scripts, plus the i2c_charger_bench worked example
 └── udev/                      # Linux udev rules for non-root CDC permissions
 ```
 
